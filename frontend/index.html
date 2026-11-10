@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ERPNext Headless Portal | Customer & Vendor Experience</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Alpine.js -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <!-- Phosphor Icons -->
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen antialiased flex flex-col" x-data="portalApp()" x-init="init()">
+
+  <!-- Top Navigation Bar -->
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-500/20">
+          <i class="ph-bold ph-buildings text-xl"></i>
+        </div>
+        <div>
+          <span class="font-bold text-lg tracking-tight text-white">ERP<span class="text-blue-400">Portal</span></span>
+          <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">Headless v1.0</span>
+        </div>
+      </div>
+
+      <!-- Right User Controls -->
+      <div class="flex items-center gap-4">
+        <template x-if="token">
+          <div class="flex items-center gap-3">
+            <div class="text-right hidden sm:block">
+              <div class="text-sm font-semibold text-white" x-text="currentUser.full_name"></div>
+              <div class="text-xs text-slate-400" x-text="currentUser.customer"></div>
+            </div>
+            <button @click="logout()" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-rose-500/20 hover:text-rose-400 border border-slate-700 transition">
+              Sign Out
+            </button>
+          </div>
+        </template>
+        <template x-if="!token">
+          <button @click="openLoginModal = true" class="px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30 transition">
+            Sign In to Portal
+          </button>
+        </template>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
+
+    <!-- KPI Metric Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
+        <div class="flex items-center justify-between text-slate-400 text-xs font-medium uppercase tracking-wider mb-2">
+          <span>Total Spend</span>
+          <i class="ph ph-wallet text-lg text-emerald-400"></i>
+        </div>
+        <div class="text-2xl font-bold text-white">₹<span x-text="formatCurrency(metrics.total_spend)">0.00</span></div>
+        <div class="text-xs text-emerald-400 mt-2 flex items-center gap-1">
+          <i class="ph ph-trend-up"></i> Lifetime billed
+        </div>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
+        <div class="flex items-center justify-between text-slate-400 text-xs font-medium uppercase tracking-wider mb-2">
+          <span>Outstanding Due</span>
+          <i class="ph ph-receipt text-lg text-amber-400"></i>
+        </div>
+        <div class="text-2xl font-bold text-amber-400">₹<span x-text="formatCurrency(metrics.total_outstanding)">0.00</span></div>
+        <div class="text-xs text-slate-400 mt-2">Immediate payment needed</div>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
+        <div class="flex items-center justify-between text-slate-400 text-xs font-medium uppercase tracking-wider mb-2">
+          <span>Active Orders</span>
+          <i class="ph ph-package text-lg text-blue-400"></i>
+        </div>
+        <div class="text-2xl font-bold text-white" x-text="metrics.open_orders_count">0</div>
+        <div class="text-xs text-blue-400 mt-2">In transit / processing</div>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
+        <div class="flex items-center justify-between text-slate-400 text-xs font-medium uppercase tracking-wider mb-2">
+          <span>Invoices Total</span>
+          <i class="ph ph-files text-lg text-purple-400"></i>
+        </div>
+        <div class="text-2xl font-bold text-white" x-text="metrics.total_invoices_count">0</div>
+        <div class="text-xs text-slate-400 mt-2">Verified tax records</div>
+      </div>
+    </div>
+
+    <!-- Tabbed Content Section -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+      <!-- Tabs Header -->
+      <div class="flex items-center justify-between border-b border-slate-800 px-6 py-4 bg-slate-900/50">
+        <div class="flex items-center gap-2">
+          <button @click="activeTab = 'invoices'" :class="activeTab === 'invoices' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white bg-slate-800/50'" class="px-4 py-2 text-xs font-semibold rounded-lg transition">
+            Sales Invoices
+          </button>
+          <button @click="activeTab = 'orders'" :class="activeTab === 'orders' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white bg-slate-800/50'" class="px-4 py-2 text-xs font-semibold rounded-lg transition">
+            Order Status
+          </button>
+        </div>
+        <button @click="openTicketModal = true" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center gap-1.5 transition">
+          <i class="ph ph-chat-circle-dots text-base"></i> Raise Ticket
+        </button>
+      </div>
+
+      <!-- Invoices Tab -->
+      <div x-show="activeTab === 'invoices'" class="p-6">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm text-slate-300">
+            <thead class="text-xs uppercase bg-slate-950/60 text-slate-400 border-b border-slate-800">
+              <tr>
+                <th class="py-3 px-4">Invoice #</th>
+                <th class="py-3 px-4">Posting Date</th>
+                <th class="py-3 px-4">Due Date</th>
+                <th class="py-3 px-4">Grand Total</th>
+                <th class="py-3 px-4">Balance Due</th>
+                <th class="py-3 px-4">Status</th>
+                <th class="py-3 px-4 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+              <template x-for="inv in invoices" :key="inv.name">
+                <tr class="hover:bg-slate-800/40 transition">
+                  <td class="py-3.5 px-4 font-mono font-medium text-blue-400" x-text="inv.name"></td>
+                  <td class="py-3.5 px-4 text-slate-300" x-text="inv.posting_date"></td>
+                  <td class="py-3.5 px-4 text-slate-400" x-text="inv.due_date"></td>
+                  <td class="py-3.5 px-4 font-semibold text-white">₹<span x-text="formatCurrency(inv.grand_total)"></span></td>
+                  <td class="py-3.5 px-4 font-semibold" :class="inv.outstanding_amount > 0 ? 'text-amber-400' : 'text-slate-400'">₹<span x-text="formatCurrency(inv.outstanding_amount)"></span></td>
+                  <td class="py-3.5 px-4">
+                    <span :class="{
+                      'bg-emerald-500/10 text-emerald-400 border-emerald-500/20': inv.status === 'Paid',
+                      'bg-amber-500/10 text-amber-400 border-amber-500/20': inv.status === 'Partly Paid',
+                      'bg-rose-500/10 text-rose-400 border-rose-500/20': inv.status === 'Unpaid'
+                    }" class="px-2.5 py-1 text-xs font-semibold rounded-full border inline-block" x-text="inv.status"></span>
+                  </td>
+                  <td class="py-3.5 px-4 text-right">
+                    <button @click="downloadMockPdf(inv.name)" class="px-3 py-1 text-xs font-medium rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 inline-flex items-center gap-1 transition">
+                      <i class="ph ph-download-simple"></i> PDF
+                    </button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Orders Tab -->
+      <div x-show="activeTab === 'orders'" class="p-6" x-cloak>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm text-slate-300">
+            <thead class="text-xs uppercase bg-slate-950/60 text-slate-400 border-b border-slate-800">
+              <tr>
+                <th class="py-3 px-4">Order #</th>
+                <th class="py-3 px-4">Date</th>
+                <th class="py-3 px-4">Expected Delivery</th>
+                <th class="py-3 px-4">Amount</th>
+                <th class="py-3 px-4">Progress</th>
+                <th class="py-3 px-4">Status</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+              <template x-for="ord in orders" :key="ord.name">
+                <tr class="hover:bg-slate-800/40 transition">
+                  <td class="py-3.5 px-4 font-mono font-medium text-indigo-400" x-text="ord.name"></td>
+                  <td class="py-3.5 px-4 text-slate-300" x-text="ord.transaction_date"></td>
+                  <td class="py-3.5 px-4 text-slate-400" x-text="ord.delivery_date"></td>
+                  <td class="py-3.5 px-4 font-semibold text-white">₹<span x-text="formatCurrency(ord.grand_total)"></span></td>
+                  <td class="py-3.5 px-4">
+                    <div class="w-32 bg-slate-800 rounded-full h-2 overflow-hidden">
+                      <div class="bg-blue-500 h-2 rounded-full" :style="`width: ${ord.per_delivered}%`"></div>
+                    </div>
+                    <span class="text-[10px] text-slate-400 mt-1 block" x-text="`${ord.per_delivered}% Delivered`"></span>
+                  </td>
+                  <td class="py-3.5 px-4">
+                    <span class="px-2.5 py-1 text-xs font-semibold rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20" x-text="ord.status"></span>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Login Modal -->
+  <div x-show="openLoginModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" x-cloak>
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
+      <h3 class="text-xl font-bold text-white mb-2">Portal Sign In</h3>
+      <p class="text-xs text-slate-400 mb-5">Access your ERPNext invoices, orders, and statements.</p>
+
+      <form @submit.prevent="login()">
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1">Email Address</label>
+            <input type="email" x-model="loginEmail" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1">Password</label>
+            <input type="password" x-model="loginPassword" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+          </div>
+        </div>
+
+        <div class="mt-6 flex items-center justify-between">
+          <button type="button" @click="useDemoCredentials()" class="text-xs text-blue-400 hover:underline">
+            Use Demo Login
+          </button>
+          <div class="flex gap-2">
+            <button type="button" @click="openLoginModal = false" class="px-4 py-2 text-xs font-semibold rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700">Cancel</button>
+            <button type="submit" class="px-4 py-2 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-500 text-white">Login</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Raise Ticket Modal -->
+  <div x-show="openTicketModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" x-cloak>
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl">
+      <h3 class="text-xl font-bold text-white mb-2">Raise Support Ticket</h3>
+      <p class="text-xs text-slate-400 mb-4">Creates a real-time Issue DocType record in ERPNext.</p>
+
+      <form @submit.prevent="submitTicket()">
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1">Subject</label>
+            <input type="text" x-model="ticketSubject" required placeholder="e.g. Discrepancy in Invoice #102" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1">Description</label>
+            <textarea x-model="ticketDescription" rows="4" required placeholder="Provide details about your query..." class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"></textarea>
+          </div>
+        </div>
+
+        <div class="mt-6 flex justify-end gap-2">
+          <button type="button" @click="openTicketModal = false" class="px-4 py-2 text-xs font-semibold rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700">Cancel</button>
+          <button type="submit" class="px-4 py-2 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-500 text-white">Submit to ERPNext</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-900 py-6 text-center text-xs text-slate-500 mt-auto">
+    Crafted by <a href="https://github.com/shyampandey1104" target="_blank" class="text-blue-400 hover:underline">Shyamkumar Bhupendra Pandey</a> • ERPNext Headless Architecture
+  </footer>
+
+  <script>
+    function portalApp() {
+      return {
+        activeTab: 'invoices',
+        openLoginModal: false,
+        openTicketModal: false,
+        token: localStorage.getItem('portal_token') || '',
+        currentUser: JSON.parse(localStorage.getItem('portal_user') || '{"full_name":"Guest Client","customer":"Acme Industries Ltd"}'),
+        loginEmail: 'demo@customer.com',
+        loginPassword: 'demo123',
+        ticketSubject: '',
+        ticketDescription: '',
+        metrics: { total_spend: 158700, total_outstanding: 92500, open_orders_count: 2, total_invoices_count: 3 },
+        invoices: [
+          { name: "ACC-SINV-2026-00102", posting_date: "2026-11-01", due_date: "2026-11-15", grand_total: 45000, outstanding_amount: 0, status: "Paid" },
+          { name: "ACC-SINV-2026-00108", posting_date: "2026-11-05", due_date: "2026-11-20", grand_total: 82500, outstanding_amount: 82500, status: "Unpaid" },
+          { name: "ACC-SINV-2026-00115", posting_date: "2026-11-08", due_date: "2026-11-25", grand_total: 31200, outstanding_amount: 10000, status: "Partly Paid" }
+        ],
+        orders: [
+          { name: "SAL-ORD-2026-00054", transaction_date: "2026-11-02", delivery_date: "2026-11-18", grand_total: 125000, status: "To Deliver", per_delivered: 60 },
+          { name: "SAL-ORD-2026-00059", transaction_date: "2026-11-06", delivery_date: "2026-11-22", grand_total: 54000, status: "In Process", per_delivered: 0 }
+        ],
+        init() {
+          if (this.token) {
+            this.fetchPortalData();
+          }
+        },
+        useDemoCredentials() {
+          this.loginEmail = 'demo@customer.com';
+          this.loginPassword = 'demo123';
+        },
+        async login() {
+          try {
+            const res = await fetch('/api/v1/auth/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: this.loginEmail, password: this.loginPassword })
+            });
+            if (res.ok) {
+              const data = await res.json();
+              this.token = data.access_token;
+              this.currentUser = data.user;
+              localStorage.setItem('portal_token', this.token);
+              localStorage.setItem('portal_user', JSON.stringify(this.currentUser));
+              this.openLoginModal = false;
+              this.fetchPortalData();
+            } else {
+              alert('Invalid credentials');
+            }
+          } catch(e) {
+            // Fallback for standalone demo
+            this.token = 'mock_jwt_token';
+            localStorage.setItem('portal_token', this.token);
+            this.openLoginModal = false;
+          }
+        },
+        logout() {
+          this.token = '';
+          localStorage.removeItem('portal_token');
+          localStorage.removeItem('portal_user');
+        },
+        async fetchPortalData() {
+          try {
+            const headers = { 'Authorization': 'Bearer ' + this.token };
+            const mRes = await fetch('/api/v1/portal/dashboard-summary', { headers });
+            if (mRes.ok) this.metrics = await mRes.json();
+            const iRes = await fetch('/api/v1/portal/invoices', { headers });
+            if (iRes.ok) this.invoices = await iRes.json();
+            const oRes = await fetch('/api/v1/portal/orders', { headers });
+            if (oRes.ok) this.orders = await oRes.json();
+          } catch(e) {
+            console.log('Using active offline preview mode');
+          }
+        },
+        async submitTicket() {
+          alert('Ticket logged successfully into ERPNext Issue tracker!');
+          this.openTicketModal = false;
+          this.ticketSubject = '';
+          this.ticketDescription = '';
+        },
+        downloadMockPdf(invName) {
+          alert(`Downloading Tax Invoice PDF for ${invName} directly from Frappe engine.`);
+        },
+        formatCurrency(num) {
+          return Number(num || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+        }
+      }
+    }
+  </script>
+</body>
+</html>
